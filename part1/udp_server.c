@@ -1,77 +1,50 @@
 #include <stdio.h>
-#include <stdlib.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-
-#define SIZE 1024
-
-void write_file(int sockfd, struct sockaddr_in addr){
-  FILE *fp;
-  char *filename = "server.txt";
-  int n;
-  char buffer[SIZE];
-  socklen_t addr_size;
-
-  // Creating a file.
-  fp = fopen(filename, "w");
-
-  // Receiving the data and writing it into the file.
-  while(1){
-
-    addr_size = sizeof(addr);
-    n = recvfrom(sockfd, buffer, SIZE, 0, (struct sockaddr*)&addr, &addr_size);
-
-    if (strcmp(buffer, "END") == 0){
-      break;
-      return;
-    }
-
-    printf("[RECEVING] Data: %s", buffer);
-    fprintf(fp, "%s", buffer);
-    bzero(buffer, SIZE);
-
-  }
-
-  fclose(fp);
-  return;
-}
+#include <stdlib.h>
+#include <ctype.h>
 
 int main(){
+  int udpSocket, nBytes;
+  char buffer[1024];
+  struct sockaddr_in serverAddr, clientAddr;
+  struct sockaddr_storage serverStorage;
+  socklen_t addr_size, client_addr_size;
+  int i;
 
-  // Defining the IP and Port
-  char *ip = "127.0.0.1";
-  int port = 8080;
+  //Create UDP socket/
+  udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
 
-  // Defining variables
-  int server_sockfd;
-  struct sockaddr_in server_addr, client_addr;
-  char buffer[SIZE];
-  int e;
+  //Configure settings in address struct/
+  serverAddr.sin_family = AF_INET;
+  serverAddr.sin_port = htons(8893);
+  serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);  
 
-  // Creating a UDP socket
-  server_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-  if (server_sockfd < 0){
-    perror("[ERROR] socket error");
-    exit(1);
+  //Bind socket with address struct/
+  bind(udpSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+
+  //Initialize size variable to be used later on/
+  addr_size = sizeof serverStorage;
+
+  while(1){
+    /* Try to receive any incoming UDP datagram. Address and port of 
+ *       requesting client will be stored on serverStorage variable */
+    nBytes = recvfrom(udpSocket,buffer,1024,0,(struct sockaddr *)&serverStorage, &addr_size);
+	printf("\n server triggered\n");
+	
+	   // Print the received message
+    printf("Received message: %s\n", buffer);
+
+	
+    //Convert message received to uppercase/
+    for(i=0;i<nBytes-1;i++)
+      buffer[i] = toupper(buffer[i]);
+
+    //Send uppercase message back to client, using serverStorage as the address/
+    sendto(udpSocket,buffer,nBytes,0,(struct sockaddr *)&serverStorage,addr_size);
   }
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_port = port;
-  server_addr.sin_addr.s_addr = inet_addr(ip);
-
-  e = bind(server_sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr));
-  if (e < 0){
-    perror("[ERROR] bind error");
-    exit(1);
-  }
-
-  printf("[STARTING] UDP File Server started. \n");
-  write_file(server_sockfd, client_addr);
-
-  printf("[SUCCESS] Data transfer complete.\n");
-  printf("[CLOSING] Closing the server.\n");
-
-  close(server_sockfd);
 
   return 0;
 }
